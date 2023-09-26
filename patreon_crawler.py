@@ -10,7 +10,7 @@ import random
 import json
 import os 
 
-from dataclasses import dataclass, field, asdict
+from patreon_classes import PatreonPost
 
 crawl_url = (
          "https://www.patreon.com/api/posts?"
@@ -29,17 +29,6 @@ crawl_url = (
 def get_crawl_url():
     return crawl_url
 
-@dataclass
-class PatreonPost():
-    post_id: int
-    title: str
-    description: str
-    filename: str
-    post_type: str
-    download_url: str
-    patreon_url: str
-    publication_date: str
-    tags: list[str]= field(default_factory=list)
 
 class PatreonCrawler():
     def __init__(
@@ -47,11 +36,13 @@ class PatreonCrawler():
             url:str,
             out_dir:str,
             out_json:str,
-            limit:int = 50 ):
+            limit:int = 0,
+            ):
         self.campaing_url = url
         self.limit = limit
         self.out_folder = out_dir
         self.out_json = out_json
+        self.browser_dir = 'selly/'
 
     def crawl(self):
         self.set_driver()
@@ -65,7 +56,7 @@ class PatreonCrawler():
                 return
         # no need to use browser after login
         self.driver.quit()
-        print("Starting crawl of {self.campaing_url}")
+        print(f"Starting crawl of {self.campaing_url}")
         posts = self.get_img_urls()
         for p in posts:
             self.download_image(p)
@@ -93,16 +84,21 @@ class PatreonCrawler():
                 attrs = post['attributes']
                 typ = attrs['post_type']
                 title = attrs['title']
-                print(f'{typ} post: {title}')
+                date = attrs['published_at']
+                print(f'{typ} post: {title} @ {date}')
                 if typ == 'image_file' and 'post_file' in attrs:
                     patreon_post = self.process_post(post)
                     post_list.append(patreon_post)
-            if len(post_list) > self.limit:
+            if self.limit and len(post_list) > self.limit:
                 print(f"Early stop at {len(post_list)}")
                 break
-            next_page = jason['links']['next']
-            jitter = random.uniform(0.0, 1)
-            time.sleep(0.5 + jitter)
+            links = jason.get('links', None)
+            if links:
+                next_page = links['next']
+            else:
+                next_page = None
+
+            self.wait()
         return post_list
                 
     def process_post(self, post):
@@ -138,8 +134,7 @@ class PatreonCrawler():
         with open(post.filename, mode='wb') as file:
             print(f"Saving {post.filename}") 
             file.write(r.content)
-        jitter = random.uniform(0.0, 1)
-        time.sleep(0.5 + jitter)
+        self.wait()
         return
 
     def persis_patreon_json(patreon,filename):
@@ -149,18 +144,28 @@ class PatreonCrawler():
         return
 
     def login(self):
-        self.driver 
+        # Make new non-headless driver
+        opts = Options()
+        opts.add_argument(f'--user-data-dir={self.browser_dir}')
+        driver = webdriver.Chrome(options=opts)
+        driver.set_window_size(1024, 768) # optional
         w = WebDriverWait(driver,50)
+        
         print("Please login in external browser window")
+        driver.get('https://www.patreon.com/login')
         w.until(
             EC.presence_of_element_located((By.ID,'pageheader-title'))
            )
         self.cookies = self.get_browser_cookies()
         return
 
+    def wait(self, avg:int = 0.5):
+        jitter = random.uniform(0.0, 1)
+        time.sleep(avg + jitter)
+
     def set_driver(self):
         opts = Options()
-        opts.add_argument('--user-data-dir=selly/')
+        opts.add_argument(f'--user-data-dir={self.browser_dir}')
         opts.add_argument('--headless')
         self.driver = webdriver.Chrome(options=opts)
         self.driver.set_window_size(1024, 768) # optional
@@ -180,7 +185,7 @@ class PatreonCrawler():
         else:
             r = resp.json()
             email = r['data']['attributes']['email']
-        print(f"Logged as {email}")
+            print(f"Logged as {email}")
         return login_succ
     
     def get_browser_cookies(self):
