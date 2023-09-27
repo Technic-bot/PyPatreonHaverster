@@ -5,3 +5,6 @@ __pycache__/
 
 selly/
 results/
+
+*.json
+*.log

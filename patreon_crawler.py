@@ -10,6 +10,8 @@ import random
 import json
 import os 
 
+from dataclasses import asdict
+
 from patreon_classes import PatreonPost
 
 crawl_url = (
@@ -26,9 +28,8 @@ crawl_url = (
          "&filter[campaign_id]={}"
             )
 
-def get_crawl_url():
-    return crawl_url
-
+import logging
+logger = logging.getLogger(__name__)
 
 class PatreonCrawler():
     def __init__(
@@ -42,7 +43,31 @@ class PatreonCrawler():
         self.limit = limit
         self.out_folder = out_dir
         self.out_json = out_json
+
         self.browser_dir = 'selly/'
+        self.log_file = 'patreon_harverster.log'
+        self.setup_logging(logger)
+        return
+    
+    def setup_logging(self, logger):
+        logger.setLevel(logging.DEBUG)
+
+        strem_handler = logging.StreamHandler()
+        strem_handler.setLevel(logging.INFO)
+        strem_formatter = logging.Formatter(
+                '%(asctime)s - %(name)s - %(message)s'
+                )
+        strem_handler.setFormatter(strem_formatter)
+        logger.addHandler(strem_handler)
+        
+        file_handler = logging.FileHandler(self.log_file)
+        file_handler.setLevel(logging.DEBUG)
+        file_fmtr = logging.Formatter(
+                '%(asctime)s - %(levelname)s - %(message)s'
+                )
+        file_handler.setFormatter(file_fmtr)
+        logger.addHandler(file_handler)
+        return
 
     def crawl(self):
         self.set_driver()
@@ -52,11 +77,11 @@ class PatreonCrawler():
         if not self.validate_login():
             self.login()
             if not self.validate_login():
-                print("Could not validate login terminating")
+                logger.error("Could not validate login terminating")
                 return
         # no need to use browser after login
         self.driver.quit()
-        print(f"Starting crawl of {self.campaing_url}")
+        logger.info(f"Starting crawl of {self.campaing_url}")
         posts = self.get_img_urls()
         for p in posts:
             self.download_image(p)
@@ -70,27 +95,27 @@ class PatreonCrawler():
         idx_str = html.find(eye_catcher)
         idx_stop = html.find('"',idx_str+len(eye_catcher))
         campaign_id = html[idx_str+len(eye_catcher):idx_stop]
-        print(f"Got campaing id: {campaign_id}")
+        logger.info(f"Got campaing id: {campaign_id}")
         return campaign_id
 
     def get_img_urls(self):
         next_page = crawl_url.format(self.campaing_id)
         post_list = []
+        page_n = 1
         while next_page:
             r = requests.get(next_page, cookies=self.cookies, headers=self.header)
             jason = r.json()
             posts = jason['data']
+            logger.info(f"Got {len(post_list)} posts at page {page_n}")
             for post in posts:
                 attrs = post['attributes']
+                self.report_post_type(attrs)
                 typ = attrs['post_type']
-                title = attrs['title']
-                date = attrs['published_at']
-                print(f'{typ} post: {title} @ {date}')
                 if typ == 'image_file' and 'post_file' in attrs:
                     patreon_post = self.process_post(post)
                     post_list.append(patreon_post)
             if self.limit and len(post_list) > self.limit:
-                print(f"Early stop at {len(post_list)}")
+                logger.info(f"Early stop at {len(post_list)}")
                 break
             links = jason.get('links', None)
             if links:
@@ -98,9 +123,18 @@ class PatreonCrawler():
             else:
                 next_page = None
 
+            page_n += 1
             self.wait()
+        self.persist_patreon_json(post_list, self.out_json)
         return post_list
-                
+
+    def report_post_type(self,attrs:dict):
+        typ = attrs['post_type']
+        title = attrs['title']
+        date = attrs['published_at']
+        logger.debug(f'Detected {typ} post: {title} @ {date}')
+        return
+
     def process_post(self, post):
         attrs=post['attributes']
         user_tags = post['relationships']['user_defined_tags']
@@ -116,28 +150,28 @@ class PatreonCrawler():
                                 patreon_url= attrs['url'],
                                 publication_date = attrs['published_at'])
         except TypeError as e:
-            print(f"Malformed entry: {post['id']} {attrs['title']} ")
+            logger.error(f"Malformed entry: {post['id']} {attrs['title']} ")
         except KeyError as e:
-            print(e)
-            print(f"Malformed entry : {post['id']} {attrs['title']} ")
+            logger.error(e)
+            logger.error(f"Malformed entry : {post['id']} {attrs['title']} ")
 
         return patreon_post
 
     def download_image(self, post):
         file_path = self.out_folder + post.filename
         if os.path.isfile(file_path):
-            print(f"{file_path} exists skipping")
+            logger.debug(f"{file_path} exists skipping")
             return
 
-        print(f"Fetching {post.download_url}") 
+        logger.debug(f"Fetching {post.download_url}") 
         r = requests.get(post.download_url, cookies=self.cookies, headers=self.header)
-        with open(post.filename, mode='wb') as file:
-            print(f"Saving {post.filename}") 
+        with open(self.out_folder + post.filename, mode='wb') as file:
+            logger.info(f"Saving {post.filename} to {self.out_folder}") 
             file.write(r.content)
         self.wait()
         return
 
-    def persis_patreon_json(patreon,filename):
+    def persist_patreon_json(self, patreon,filename):
         print(f"Saving json to {filename}")
         with open(filename,'w') as out_file:
             json.dump(patreon, out_file, default=asdict)
@@ -180,12 +214,12 @@ class PatreonCrawler():
         status = resp.status_code
         login_succ = True
         if status != 200:
-            print(f"Login error {status}")
+            logger.error(f"Login error {status}")
             login_succ = False 
         else:
             r = resp.json()
             email = r['data']['attributes']['email']
-            print(f"Logged as {email}")
+            logger.info(f"Logged as {email}")
         return login_succ
     
     def get_browser_cookies(self):
@@ -196,7 +230,7 @@ class PatreonCrawler():
             name = cookie['name']
             val = cookie['value']
             cookie_dict[name] = val
-            print(f"Setting cookie {name}:{val}")
+            logger.debug(f"Setting cookie {name}:{val}")
         return cookie_dict
 
     def get_headers(self):
