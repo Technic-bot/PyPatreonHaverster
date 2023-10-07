@@ -43,27 +43,33 @@ class PatreonCrawler():
             self,
             url: str,
             out_dir: str,
-            out_json: str,
+            out_db: str,
             limit: int = 0,
-            cache: str = ''
             ):
         self.campaing_url = url
         self.limit = limit
         self.out_folder = out_dir
-        self.out_json = out_json
+        self.out_db = out_db
 
         self.browser_dir = 'selly/'
         self.log_file = 'patreon_harverster.log'
         self.setup_logging(logger)
 
-        self.cache = None
-        if cache:
-            self.make_cache(cache)
+        self.load_cache(self.out_db)
         return
 
-    def make_cache(self, cache_file):
-        if cache_file.endswith('json'):
-           self.cache = caches.JsonCache(cache_file)
+    def load_cache(self, cache_file):
+        self.post_list = []
+        self.cache = None
+        if not os.path.isfile(cache_file):
+            logger.info("No file found starting with empty cache")
+            return 
+        if cache_file.endswith('.json'):
+            self.cache = caches.JsonCache(cache_file)
+            for p in self.cache.patreon_data:
+                post = PatreonPost(**p)
+                self.post_list.append(post)
+            logger.info(f"Read {len(self.post_list)} post from {cache_file}")
         return
 
     def setup_logging(self, logger):
@@ -87,22 +93,22 @@ class PatreonCrawler():
         return
 
     def crawl(self):
-        self.set_driver()
+        self.set_request_metadata()
         self.campaing_id = self.get_campaign_id()
         if not self.validate_login():
             self.login()
             if not self.validate_login():
                 logger.error("Could not validate login terminating")
                 return
-        # no need to use browser after login
+
         logger.info(f"Starting crawl of {self.campaing_url}")
-        posts = self.get_img_urls()
-        for p in posts:
+        self.get_img_urls()
+        for p in self.post_list:
             self.download_image(p)
 
         return
 
-    def set_driver(self):
+    def set_request_metadata(self):
         opts = Options()
         logger.info("Setting cookies and headers")
         opts.add_argument('--headless')
@@ -182,31 +188,30 @@ class PatreonCrawler():
             EC.presence_of_element_located((By.ID, 'main-app-navigation'))
            )
         self.cookies = self.get_browser_cookies()
+        self.header = self.get_headers()
         self.driver.quit()
         return
 
     def get_img_urls(self):
         next_page = crawl_url.format(self.campaing_id)
-        post_list = []
         page_n = 1
         while next_page:
             r = requests.get(next_page, cookies=self.cookies, headers=self.header)
             jason = r.json()
             posts = jason['data']
-            logger.info(f"Got {len(post_list)} posts at page {page_n}")
+            n_posts = len(self.post_list)
+            logger.info(f"Got {n_posts} posts at page {page_n}")
             for post in posts:
                 attrs = post['attributes']
                 self.report_post_type(attrs)
                 if ( self.is_valid_post(attrs) 
                         and not self.is_processed(post['id']) ):
                     patreon_post = self.process_post(post)
-                    post_list.append(patreon_post)
-            if self.limit and len(post_list) > self.limit:
-                logger.info(f"Early stop at {len(post_list)}")
+                    self.post_list.append(patreon_post)
+
+            if self.early_stop(post['id']):
                 break
-            if self.is_processed(post['id']):
-                logger.info(f"Early stop from cache at {len(post_list)}")
-                break
+
             links = jason.get('links', None)
             if links:
                 next_page = links['next']
@@ -215,9 +220,8 @@ class PatreonCrawler():
 
             page_n += 1
             self.wait()
-        self.persist_patreon_json(post_list, self.out_json)
-        self.persist_cache(post_list)
-        return post_list
+        self.persist_patreon_posts(self.out_db)
+        return 
 
     def wait(self, avg: int = 0.5):
         jitter = random.uniform(0.0, 1)
@@ -229,6 +233,17 @@ class PatreonCrawler():
         date = attrs['published_at']
         logger.debug(f'Detected {typ} post: {title} @ {date}')
         return
+
+    def early_stop(self, post_id):
+        stop = False
+        n_posts = len(self.post_list)
+        if self.limit and len(self.post_list) > self.limit:
+            logger.info(f"Early stop at {n_posts}")
+            stop = True
+        if self.is_processed(post_id):
+            logger.info(f"Early stop from cache at {n_posts}")
+            stop = True
+        return stop
 
     def is_valid_post(self, attrs):
         typ = attrs['post_type']
@@ -279,15 +294,8 @@ class PatreonCrawler():
         self.wait()
         return
 
-    def persist_patreon_json(self, patreon, filename):
+    def persist_patreon_posts(self, filename):
         print(f"Saving json to {filename}")
         with open(filename, 'w') as out_file:
-            json.dump(patreon, out_file, default=asdict)
-        return
-
-    def persist_cache(self, post_list):
-        if self.cache:
-            lst = list(map(asdict, post_list))
-            self.cache.patreon_data = lst + self.cache.patreon_data
-            self.cache.persist()
+            json.dump(self.post_list, out_file, default=asdict)
         return
