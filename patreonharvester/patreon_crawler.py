@@ -1,7 +1,7 @@
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.firefox.options import Options
 from selenium.webdriver.support import expected_conditions as EC
 
 import requests
@@ -88,8 +88,6 @@ class PatreonCrawler():
 
     def crawl(self):
         self.set_driver()
-        self.cookies = self.get_browser_cookies()
-        self.header = self.get_headers()
         self.campaing_id = self.get_campaign_id()
         if not self.validate_login():
             self.login()
@@ -97,7 +95,6 @@ class PatreonCrawler():
                 logger.error("Could not validate login terminating")
                 return
         # no need to use browser after login
-        self.driver.quit()
         logger.info(f"Starting crawl of {self.campaing_url}")
         posts = self.get_img_urls()
         for p in posts:
@@ -107,10 +104,17 @@ class PatreonCrawler():
 
     def set_driver(self):
         opts = Options()
-        opts.add_argument(f'--user-data-dir={self.browser_dir}')
+        logger.info("Setting cookies and headers")
         opts.add_argument('--headless')
-        self.driver = webdriver.Chrome(options=opts)
+        opts.add_argument('-profile')
+        opts.add_argument(self.browser_dir)
+        
+        self.driver = webdriver.Firefox(options=opts)
         self.driver.set_window_size(1024, 768)
+        self.cookies = self.get_browser_cookies()
+        self.header = self.get_headers()
+        self.driver.quit()
+        return
 
     def get_browser_cookies(self):
         self.driver.get('https://www.patreon.com/login')
@@ -135,6 +139,7 @@ class PatreonCrawler():
         return headers
 
     def get_campaign_id(self):
+        logger.info(f"Getting id for {self.campaing_url}")
         r = requests.get(self.campaing_url, cookies=self.cookies, headers=self.header)
         html = r.text
         eye_catcher = 'api/campaigns/'
@@ -165,17 +170,19 @@ class PatreonCrawler():
     def login(self):
         # Make new non-headless driver
         opts = Options()
-        opts.add_argument(f'--user-data-dir={self.browser_dir}')
-        driver = webdriver.Chrome(options=opts)
-        driver.set_window_size(1024, 768)
-        w = WebDriverWait(driver, 50)
+        opts.add_argument('-profile')
+        opts.add_argument(self.browser_dir)
+        self.driver = webdriver.Firefox(options=opts)
+        self.driver.set_window_size(1024, 768)
+        w = WebDriverWait(self.driver, 50)
 
         print("Please login in external browser window")
-        driver.get('https://www.patreon.com/login')
+        self.driver.get('https://www.patreon.com/login')
         w.until(
-            EC.presence_of_element_located((By.ID, 'pageheader-title'))
+            EC.presence_of_element_located((By.ID, 'main-app-navigation'))
            )
         self.cookies = self.get_browser_cookies()
+        self.driver.quit()
         return
 
     def get_img_urls(self):
@@ -279,7 +286,8 @@ class PatreonCrawler():
         return
 
     def persist_cache(self, post_list):
-        lst = list(map(asdict, post_list))
-        self.cache.patreon_data = lst + self.cache.patreon_data
-        self.cache.persist()
+        if self.cache:
+            lst = list(map(asdict, post_list))
+            self.cache.patreon_data = lst + self.cache.patreon_data
+            self.cache.persist()
         return

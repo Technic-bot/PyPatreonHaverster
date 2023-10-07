@@ -1,4 +1,5 @@
 import argparse
+import sys
 from patreon_crawler import PatreonCrawler
 
 def proc_opts():
@@ -8,6 +9,7 @@ def proc_opts():
     parser.add_argument('--limit', default=0, type=int)
     parser.add_argument('--json_name', default='patreon.json')
     parser.add_argument('--cache', help='Cache file')
+    parser.add_argument('--login', action='store_true', help='login to patreon for cookies')
     return parser.parse_args()
 
         
@@ -20,5 +22,10 @@ if __name__=="__main__":
             args.json_name, args.limit,
             args.cache    
         )
+
+    if args.login:
+        pc.login()
+        sys.exit(1)
+
     pc.crawl()
     pc.driver.quit()
