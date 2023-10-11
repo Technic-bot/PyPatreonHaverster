@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 
 @dataclass
 class PatreonPost():
@@ -7,7 +7,7 @@ class PatreonPost():
     description: str
     filename: str
     post_type: str
-    download_url: str
     patreon_url: str
     publication_date: str
+    download_url: str = ''
     tags: list[str]= field(default_factory=list)

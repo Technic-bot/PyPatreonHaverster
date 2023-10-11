@@ -43,33 +43,23 @@ class PatreonCrawler():
             self,
             url: str,
             out_dir: str,
-            out_db: str,
+            cache: caches.HarvestCache,
             limit: int = 0,
             ):
         self.campaing_url = url
         self.limit = limit
         self.out_folder = out_dir
-        self.out_db = out_db
+
+        self.custom_gecko_path = None
 
         self.browser_dir = 'selly/'
+
         self.log_file = 'patreon_harverster.log'
         self.setup_logging(logger)
 
-        self.load_cache(self.out_db)
-        return
-
-    def load_cache(self, cache_file):
         self.post_list = []
-        self.cache = None
-        if not os.path.isfile(cache_file):
-            logger.info("No file found starting with empty cache")
-            return 
-        if cache_file.endswith('.json'):
-            self.cache = caches.JsonCache(cache_file)
-            for p in self.cache.patreon_data:
-                post = PatreonPost(**p)
-                self.post_list.append(post)
-            logger.info(f"Read {len(self.post_list)} post from {cache_file}")
+
+        self.cache = cache
         return
 
     def setup_logging(self, logger):
@@ -114,8 +104,14 @@ class PatreonCrawler():
         opts.add_argument('--headless')
         opts.add_argument('-profile')
         opts.add_argument(self.browser_dir)
+        if self.custom_gecko_path:
+            service = webdriver.FirefoxService(
+                        executable_path=self.custom_gecko_path
+                      )
+        else:
+            service = webdriver.FirefoxService()
         
-        self.driver = webdriver.Firefox(options=opts)
+        self.driver = webdriver.Firefox(service=service, options=opts)
         self.driver.set_window_size(1024, 768)
         self.cookies = self.get_browser_cookies()
         self.header = self.get_headers()
@@ -203,7 +199,7 @@ class PatreonCrawler():
             logger.info(f"Got {n_posts} posts at page {page_n}")
             for post in posts:
                 attrs = post['attributes']
-                self.report_post_type(attrs)
+                self.report_post_type(attrs, post['id'])
                 if ( self.is_valid_post(attrs) 
                         and not self.is_processed(post['id']) ):
                     patreon_post = self.process_post(post)
@@ -220,18 +216,18 @@ class PatreonCrawler():
 
             page_n += 1
             self.wait()
-        self.persist_patreon_posts(self.out_db)
+        self.cache.persist(self.post_list) 
         return 
 
     def wait(self, avg: int = 0.5):
         jitter = random.uniform(0.0, 1)
         time.sleep(avg + jitter)
 
-    def report_post_type(self, attrs: dict):
+    def report_post_type(self, attrs: dict, id: int):
         typ = attrs['post_type']
         title = attrs['title']
         date = attrs['published_at']
-        logger.debug(f'Detected {typ} post: {title} @ {date}')
+        logger.debug(f'Detected {typ} post: {id}:{title} @ {date}')
         return
 
     def early_stop(self, post_id):
@@ -253,7 +249,7 @@ class PatreonCrawler():
     def is_processed(self, post_id):
         if not self.cache:
             return False
-        return self.cache.is_post_present(post_id)
+        return self.cache.is_post_present(int(post_id))
 
     def process_post(self, post):
         attrs = post['attributes']
@@ -261,7 +257,7 @@ class PatreonCrawler():
         post_tags = [t['id'].split(';')[-1] for t in user_tags['data']]
         try:
             patreon_post = PatreonPost(
-                    post_id=post['id'],
+                    post_id=int(post['id']),
                     title=attrs['title'],
                     description=attrs['content'],
                     download_url=attrs['post_file']['url'],
