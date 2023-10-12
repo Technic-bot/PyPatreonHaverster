@@ -77,7 +77,38 @@ class SqlCache(HarvestCache):
             self.patreon_data.append(post)
         return rows
 
+    def persist(self, post_list):
+        posts, tags = self.make_sqllite_lists(post_list)
+        self.patreon_data.extend(post_list)
+        conn = sqlite3.connect(self.file)
+        cursor = conn.cursor()
+        sql_stmt = ("INSERT OR REPLACE INTO patreon " 
+                    "(id, title, description, filename, type, "
+                    "patreon_url, date) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?);")
+        cursor.executemany(sql_stmt, posts)
+
+        sql_stmt = ("INSERT OR REPLACE INTO tags (id, tag) "
+                    "VALUES (?, ?);")
+        cursor.executemany(sql_stmt, tags)
+        conn.commit()
+        conn.close()
+        return
+
+    def make_sqllite_lists(self, post_list):
+        """ Turns a bunch of dataclasses into list of tuples for sqlite """
+        # consider going sqlalchemy later
+        patreon_list = []
+        tag_list = []
+        for p in post_list:
+            tup = (p.post_id, p.title, p.description,
+                   p.filename, p.post_type, p.patreon_url,
+                   p.publication_date)
+            patreon_list.append(tup)
+
+            for tag in p.tags:
+                tag_tup = (p.post_id, tag)
+                tag_list.append(tag_tup)
+        return patreon_list, tag_list
             
-
-
 
