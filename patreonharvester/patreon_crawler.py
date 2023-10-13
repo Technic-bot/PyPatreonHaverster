@@ -14,7 +14,7 @@ from dataclasses import asdict
 
 from patreon_classes import PatreonPost
 
-import caches
+from caches import HarvestCache
 
 
 import logging
@@ -43,7 +43,7 @@ class PatreonCrawler():
             self,
             url: str,
             out_dir: str,
-            cache: caches.HarvestCache,
+            cache: HarvestCache,
             limit: int = 0,
             ):
         self.campaing_url = url
@@ -73,7 +73,7 @@ class PatreonCrawler():
         strem_handler.setFormatter(strem_formatter)
         logger.addHandler(strem_handler)
 
-        file_handler = logging.FileHandler(self.log_file)
+        file_handler = logging.FileHandler(self.log_file, mode='w')
         file_handler.setLevel(logging.DEBUG)
         file_fmtr = logging.Formatter(
                 '%(asctime)s - %(levelname)s - %(message)s'
@@ -193,22 +193,16 @@ class PatreonCrawler():
         page_n = 1
         while next_page:
             r = requests.get(next_page, cookies=self.cookies, headers=self.header)
-            jason = r.json()
-            posts = jason['data']
+            response = r.json()
+            posts = response['data']
             n_posts = len(self.post_list)
             logger.info(f"Got {n_posts} posts at page {page_n}")
-            for post in posts:
-                attrs = post['attributes']
-                self.report_post_type(attrs, post['id'])
-                if ( self.is_valid_post(attrs) 
-                        and not self.is_processed(post['id']) ):
-                    patreon_post = self.process_post(post)
-                    self.post_list.append(patreon_post)
+            last_post =self.process_api_response(posts)
 
-            if self.early_stop(post['id']):
+            if self.early_stop(last_post['id']):
                 break
 
-            links = jason.get('links', None)
+            links = response.get('links', None)
             if links:
                 next_page = links['next']
             else:
@@ -218,6 +212,17 @@ class PatreonCrawler():
             self.wait()
         self.cache.persist(self.post_list) 
         return 
+
+    def process_api_response(self, posts: dict):
+        for post in posts:
+            attrs = post['attributes']
+            self.report_post_type(attrs, post['id'])
+            if ( self.is_valid_post(attrs) 
+                    and not self.is_processed(post['id']) ):
+                patreon_post = self.process_post(post)
+                self.post_list.append(patreon_post)
+
+        return post
 
     def wait(self, avg: int = 0.5):
         jitter = random.uniform(0.0, 1)

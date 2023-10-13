@@ -2,7 +2,7 @@ import argparse
 import sys
 import os
 from patreon_crawler import PatreonCrawler
-from patreon_crawler import caches
+import caches
 
 def proc_opts():
     parser = argparse.ArgumentParser(description="Patreon art scraper")
