@@ -103,6 +103,7 @@ class PatreonCrawler():
         logger.info("Setting cookies and headers")
         opts.add_argument('--headless')
         opts.add_argument('-profile')
+        logger.info(f"Reading from browser directory: {self.browser_dir}")
         opts.add_argument(self.browser_dir)
         if self.custom_gecko_path:
             service = webdriver.FirefoxService(
