@@ -12,6 +12,7 @@ def proc_opts():
     parser.add_argument('--db-file', default='patreon.json')
     parser.add_argument('--login', action='store_true', help='login to patreon for cookies')
     parser.add_argument('--gecko-path', help='Custom geckodriver path')
+    parser.add_argument('--browser-dir', help='Browser user directory for cookies and other things')
     return parser.parse_args()
 
 def cache_factory(filename):
@@ -47,6 +48,8 @@ if __name__=="__main__":
 
     if args.gecko_path:
         pc.custom_gecko_path = args.gecko_path
+    if args.browser_dir:
+        pc.browser_dir = args.browser_dir
 
     pc.crawl()
     pc.driver.quit()
