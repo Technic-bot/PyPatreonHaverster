@@ -18,7 +18,7 @@ from caches import HarvestCache
 
 
 import logging
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("patreonharvester."+__name__)
 
 crawl_url = (
          "https://www.patreon.com/api/posts?"
@@ -54,32 +54,9 @@ class PatreonCrawler():
 
         self.browser_dir = 'selly/'
 
-        self.log_file = 'patreon_harverster.log'
-        self.setup_logging(logger)
-
         self.post_list = []
 
         self.cache = cache
-        return
-
-    def setup_logging(self, logger):
-        logger.setLevel(logging.DEBUG)
-
-        strem_handler = logging.StreamHandler()
-        strem_handler.setLevel(logging.INFO)
-        strem_formatter = logging.Formatter(
-                '%(asctime)s - %(name)s - %(message)s'
-                )
-        strem_handler.setFormatter(strem_formatter)
-        logger.addHandler(strem_handler)
-
-        file_handler = logging.FileHandler(self.log_file, mode='w')
-        file_handler.setLevel(logging.DEBUG)
-        file_fmtr = logging.Formatter(
-                '%(asctime)s - %(levelname)s - %(message)s'
-                )
-        file_handler.setFormatter(file_fmtr)
-        logger.addHandler(file_handler)
         return
 
     def crawl(self):
