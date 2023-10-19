@@ -10,7 +10,7 @@ import random
 import json
 import os
 
-from dataclasses import asdict
+import dataclasses
 
 from patreon_classes import PatreonPost
 
@@ -35,7 +35,6 @@ crawl_url = (
             )
 
 # For specific post media
-# https://www.patreon.com/api/posts/90214933/media
 # meta
 
 class PatreonCrawler():
@@ -55,6 +54,9 @@ class PatreonCrawler():
         self.browser_dir = 'selly/'
 
         self.post_list = []
+        self.multi_image_posts = []
+
+        self.ignore_cache = False
 
         self.cache = cache
         return
@@ -175,7 +177,8 @@ class PatreonCrawler():
             posts = response['data']
             n_posts = len(self.post_list)
             logger.info(f"Got {n_posts} posts at page {page_n}")
-            last_post =self.process_api_response(posts)
+            last_post, multi_posts = self.process_api_response(posts)
+            self.get_media_image_urls(multi_posts)
 
             if self.early_stop(last_post['id']):
                 break
@@ -192,25 +195,70 @@ class PatreonCrawler():
         return 
 
     def process_api_response(self, posts: dict):
+        multi_posts = []
         for post in posts:
             attrs = post['attributes']
             self.report_post_type(attrs, post['id'])
+
             if ( self.is_valid_post(attrs) 
                     and not self.is_processed(post['id']) ):
                 patreon_post = self.process_post(post)
+
+                if self.has_multiple_images(post):
+                    multi_posts.append(patreon_post)
+                
                 self.post_list.append(patreon_post)
 
-        return post
+        # return last post checked
+        last_post = post
+        return last_post, multi_posts
 
-    def wait(self, avg: int = 0.5):
-        jitter = random.uniform(0.0, 1)
-        time.sleep(avg + jitter)
+    def has_multiple_images(self, post):
+        attrs = post['attributes']
+        img_order = attrs['post_metadata']['image_order']
+        if len(img_order) > 1: 
+            return True
+
+        attached = post['relationships']['attachments']['data']
+        if attached:
+            return True
+
+        return False
 
     def report_post_type(self, attrs: dict, id: int):
         typ = attrs['post_type']
         title = attrs['title']
         date = attrs['published_at']
         logger.debug(f'Detected {typ} post: {id}:{title} @ {date}')
+        return
+
+    def get_media_image_urls(self, posts):
+        for p in posts:
+            resp = self.get_post_media(p.post_id)
+            self.process_media_response(p, resp)
+            self.wait()
+        return
+
+    def get_post_media(self, post_id):
+        api_url = "https://www.patreon.com/api/posts/{}/media".format(post_id)
+        r = requests.get(api_url, cookies=self.cookies, headers=self.header)
+        logger.info(f'Requesting media for {post_id}')
+        return r.json()
+
+    def process_media_response(self, post, resp):
+        media_imgs = resp['data']
+        for media in media_imgs:
+            url = media['attributes']['download_url']
+            filename = media['attributes']['file_name']
+            if filename != post.filename:
+                # Copy post with new filename ignore file 
+                # from parent post
+                media_post = dataclasses.replace(post)
+                media_post.filename = filename 
+                logger.debug(f'Detected extra image for '
+                             f'{post.post_id}: {media_post.filename}') 
+                self.post_list.append(media_post)
+
         return
 
     def early_stop(self, post_id):
@@ -230,6 +278,9 @@ class PatreonCrawler():
         return valid 
 
     def is_processed(self, post_id):
+        if self.ignore_cache:
+            return False
+
         if not self.cache:
             return False
         return self.cache.is_post_present(int(post_id))
@@ -258,6 +309,10 @@ class PatreonCrawler():
             logger.error(f"Malformed entry : {post['id']} {attrs['title']} ")
 
         return patreon_post
+    
+    def wait(self, avg: int = 0.5):
+        jitter = random.uniform(0.0, 1)
+        time.sleep(avg + jitter)
 
     def download_image(self, post):
         file_path = self.out_folder + post.filename
@@ -271,10 +326,4 @@ class PatreonCrawler():
             logger.info(f"Saving {post.filename} to {self.out_folder}")
             file.write(r.content)
         self.wait()
-        return
-
-    def persist_patreon_posts(self, filename):
-        print(f"Saving json to {filename}")
-        with open(filename, 'w') as out_file:
-            json.dump(self.post_list, out_file, default=asdict)
         return

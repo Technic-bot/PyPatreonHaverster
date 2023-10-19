@@ -2,6 +2,7 @@
 # print(sys.path)
 from patreonharvester.patreon_crawler import PatreonCrawler
 from patreonharvester.caches import EmptyJsonCache
+from patreonharvester.patreon_classes import PatreonPost
 
 def test_tester():
     assert 1
@@ -76,3 +77,39 @@ def test_is_no_processed(api_data):
     crawler.process_api_response(posts)
 
     assert not crawler.is_processed(90431751)
+
+def test_single_media_process(api_multipost_data, media_data):
+    cache = EmptyJsonCache('patreon.json')
+    crawler = PatreonCrawler('dummy_url','dummy_out' , cache)
+
+    post = api_multipost_data['data'][0]
+    post = crawler.process_post(post)
+
+    crawler.process_media_response(post, media_data)
+
+    assert len(crawler.post_list) == 5
+
+def test_media_process(api_multipost_data, media_data):
+    cache = EmptyJsonCache('patreon.json')
+    crawler = PatreonCrawler('dummy_url','dummy_out' , cache)
+
+    posts = api_multipost_data['data']
+    posts, multiple_images = crawler.process_api_response(posts)
+
+    assert len(multiple_images) == 8
+
+def test_post_has_multiple_images(api_multipost_data, media_data):
+    cache = EmptyJsonCache('patreon.json')
+    crawler = PatreonCrawler('dummy_url','dummy_out' , cache)
+
+    post = api_multipost_data['data'][0]
+
+    assert crawler.has_multiple_images(post) 
+
+def test_post_has_single_image(api_multipost_data, media_data):
+    cache = EmptyJsonCache('patreon.json')
+    crawler = PatreonCrawler('dummy_url','dummy_out' , cache)
+
+    post = api_multipost_data['data'][2]
+
+    assert not crawler.has_multiple_images(post) 
