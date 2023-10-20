@@ -177,6 +177,7 @@ class PatreonCrawler():
             posts = response['data']
             n_posts = len(self.post_list)
             logger.info(f"Got {n_posts} posts at page {page_n}")
+            logger.debug(f"Crawling {next_page}")
             last_post, multi_posts = self.process_api_response(posts)
             self.get_media_image_urls(multi_posts)
 
@@ -215,13 +216,25 @@ class PatreonCrawler():
 
     def has_multiple_images(self, post):
         attrs = post['attributes']
-        img_order = attrs['post_metadata']['image_order']
-        if len(img_order) > 1: 
-            return True
+        try: 
+            post_metadata = attrs['post_metadata']
+            if not post_metadata:
+                return False
 
-        attached = post['relationships']['attachments']['data']
-        if attached:
-            return True
+            img_order = post_metadata.get('image_order', None)
+
+            if img_order and len(img_order) > 1: 
+                return True
+
+            attached = post['relationships']['attachments']['data']
+            if attached:
+                return True
+        except TypeError as e:
+            logger.error(e)
+            logger.error(f"Malformed request on {post['id']}")
+        except KeyError as e:
+            logger.error(e)
+            logger.error(f"Malformed request on {post['id']}")
 
         return False
 
@@ -242,7 +255,7 @@ class PatreonCrawler():
     def get_post_media(self, post_id):
         api_url = "https://www.patreon.com/api/posts/{}/media".format(post_id)
         r = requests.get(api_url, cookies=self.cookies, headers=self.header)
-        logger.info(f'Requesting media for {post_id}')
+        logger.debug(f'Requesting media for {post_id}')
         return r.json()
 
     def process_media_response(self, post, resp):
@@ -258,7 +271,7 @@ class PatreonCrawler():
                 logger.debug(f'Detected extra image for '
                              f'{post.post_id}: {media_post.filename}') 
                 self.post_list.append(media_post)
-
+        logger.info(f"Got {len(media_imgs)} images from {post.title}")
         return
 
     def early_stop(self, post_id):
@@ -267,7 +280,7 @@ class PatreonCrawler():
         if self.limit and len(self.post_list) > self.limit:
             logger.info(f"Early stop at {n_posts}")
             stop = True
-        if self.is_processed(post_id):
+        if self.is_processed(post_id) and not self.ignore_cache:
             logger.info(f"Early stop from cache at {n_posts}")
             stop = True
         return stop
@@ -278,8 +291,8 @@ class PatreonCrawler():
         return valid 
 
     def is_processed(self, post_id):
-        if self.ignore_cache:
-            return False
+        # if self.ignore_cache:
+        #    return False
 
         if not self.cache:
             return False

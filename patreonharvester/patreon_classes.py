@@ -11,3 +11,6 @@ class PatreonPost():
     publication_date: str
     download_url: str = ''
     tags: list[str]= field(default_factory=list)
+
+    def __lt__(self, other):
+        return self.post_id < other.post_id

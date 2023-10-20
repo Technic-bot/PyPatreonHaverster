@@ -18,6 +18,7 @@ def proc_opts():
     parser.add_argument('--browser-dir', help='Browser user directory for cookies and other things')
     parser.add_argument('--post-process', default='', help='Post processor')
     parser.add_argument('--post-process-dir', default='', help='Post Proces output directory')
+    parser.add_argument('--ignore-cache', action='store_true', help='Keep scraping regardless of hitting cache')
     return parser.parse_args()
 
 
@@ -88,6 +89,8 @@ if __name__=="__main__":
         pc.custom_gecko_path = args.gecko_path
     if args.browser_dir:
         pc.browser_dir = args.browser_dir
+    if args.ignore_cache:
+        pc.ignore_cache = True
             
     pc.crawl()
     pc.driver.quit()

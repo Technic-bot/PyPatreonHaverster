@@ -20,6 +20,9 @@ class HarvestCache():
     def is_post_present(self, post_id):
         return post_id in self.cache
 
+    def order(self):
+        self.patreon_data.sort(reverse=True)
+
 class JsonCache(HarvestCache):
     def __init__(self, file:str = ''):
         super().__init__(file)
@@ -37,6 +40,7 @@ class JsonCache(HarvestCache):
     def persist(self, post_list):
         """ Takes a list of posts and appends to cache before saving"""
         self.patreon_data.extend(post_list)
+        self.order()
         with open(self.file, 'w') as json_file:
             json.dump(self.patreon_data, json_file, default=asdict)
         return 
@@ -83,7 +87,7 @@ class SqlCache(HarvestCache):
         conn = sqlite3.connect(self.file)
         cursor = conn.cursor()
         sql_stmt = ("INSERT OR REPLACE INTO patreon " 
-                    "(id, title, description, filename, type, "
+                    "(patreon_id, title, description, filename, type, "
                     "patreon_url, date) "
                     "VALUES (?, ?, ?, ?, ?, ?, ?);")
         cursor.executemany(sql_stmt, posts)
