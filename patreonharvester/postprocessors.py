@@ -1,4 +1,4 @@
-from PIL import Image 
+from PIL import Image, UnidentifiedImageError
 
 import os
 import logging
@@ -49,14 +49,17 @@ class ImageResizer(ImagePostProcessor):
             if not os.path.isfile(input_path):
                 logger.error(f'{input_path} not and image')
                 continue
-            img = Image.open(input_path)
-            img.thumbnail([300,300])
-            out_path = self.out_dir + img_file
             try:
+                img = Image.open(input_path)
+                img.thumbnail([300,300])
+                out_path = self.out_dir + img_file
                 proccessed_imgs += 1
                 logger.info(f'Saving {self.out_dir + img_file}')
                 img.save(out_path)
             except ValueError as e:
+                logger.error(e)
+                logger.error(f'Error saving {out_path}')
+            except UnidentifiedImageError as e:
                 logger.error(e)
                 logger.error(f'Error saving {out_path}')
         return
