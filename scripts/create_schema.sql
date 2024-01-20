@@ -4,8 +4,7 @@ drop table patreon;
 drop table tags;
 
 CREATE TABLE IF NOT EXISTS "patreon"(
-    "vault_id" integer PRIMARY KEY,
-    "patreon_id" INTEGER ,
+    "id" integer PRIMARY KEY,
     "title" TEXT,
     "description" TEXT,
     "filename" TEXT,

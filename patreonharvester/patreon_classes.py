@@ -5,10 +5,10 @@ class PatreonPost():
     post_id: int
     title: str
     description: str
-    filename: str
     post_type: str
     patreon_url: str
     publication_date: str
+    filename: str = ''
     download_url: str = ''
     tags: list[str]= field(default_factory=list)
 

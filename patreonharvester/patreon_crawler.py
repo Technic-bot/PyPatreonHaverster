@@ -9,6 +9,7 @@ import time
 import random
 import json
 import os
+import re
 
 import dataclasses
 
@@ -20,19 +21,20 @@ from caches import HarvestCache
 import logging
 logger = logging.getLogger("patreonharvester."+__name__)
 
-crawl_url = (
-         "https://www.patreon.com/api/posts?"
-         "include=user%2Cattachments%2Ccampaign%2Cpoll.choices%2Cpoll.current_user_responses.user%2Cpoll.current_user_responses.choice%2Cpoll.current_user_responses.poll%2Caccess_rules.tier.null%2Cimages.null%2Caudio.null%2Cuser_defined_tags"
-         "&fields[post]=change_visibility_at%2Ccomment_count%2Ccontent%2Ccurrent_user_can_delete%2Ccurrent_user_can_view%2Ccurrent_user_has_liked%2Cembed%2Cimage%2Cis_paid%2Clike_count%2Cmin_cents_pledged_to_view%2Cpost_file%2Cpost_metadata%2Cpublished_at%2Cpatron_count%2Cpatreon_url%2Cpost_type%2Cpledge_url%2Cthumbnail_url%2Cteaser_text%2Ctitle%2Cupgrade_url%2Curl%2Cwas_posted_by_campaign_owner"
-         "&fields[user]=image_url%2Cfull_name%2Curl"
-         "&fields[campaign]=show_audio_post_download_links%2Cavatar_photo_url%2Cearnings_visibility%2Cis_nsfw%2Cis_monthly%2Cname%2Curl"
-         "&fields[access_rule]=access_rule_type%2Camount_cents"
-         "&fields[media]=id%2Cimage_urls%2Cdownload_url%2Cmetadata%2Cfile_name"
-         "&sort=-published_at"
-         "&filter[is_draft]=false&filter[contains_exclusive_posts]=true&json-api-use-default-includes=false&json-api-version=1.0"
-         # "&filter[campaign_id]=145535"
-         "&filter[campaign_id]={}"
-            )
+crawl_url = ( "https://www.patreon.com/api/posts?"
+              "include=campaign%2Caccess_rules%2Cattachments%2Caudio%2Caudio_preview.null%2Cimages%2Cmedia%2Cnative_video_insights%2Cpoll.choices%2Cpoll.current_user_responses.user%2Cpoll.current_user_responses.choice%2Cpoll.current_user_responses.poll%2Cuser%2Cuser_defined_tags%2Cti_checks"
+              "&fields[campaign]=currency%2Cshow_audio_post_download_links%2Cavatar_photo_url%2Cavatar_photo_image_urls%2Cearnings_visibility%2Cis_nsfw%2Cis_monthly%2Cname%2Curl"
+              "&fields[post]=change_visibility_at%2Ccomment_count%2Ccommenter_count%2Ccontent%2Ccurrent_user_can_comment%2Ccurrent_user_can_delete%2Ccurrent_user_can_report%2Ccurrent_user_can_view%2Ccurrent_user_comment_disallowed_reason%2Ccurrent_user_has_liked%2Cembed%2Cimage%2Cimpression_count%2Cinsights_last_updated_at%2Cis_paid%2Clike_count%2Cmeta_image_url%2Cmin_cents_pledged_to_view%2Cpost_file%2Cpost_metadata%2Cpublished_at%2Cpatreon_url%2Cpost_type%2Cpledge_url%2Cpreview_asset_type%2Cthumbnail%2Cthumbnail_url%2Cteaser_text%2Ctitle%2Cupgrade_url%2Curl%2Cwas_posted_by_campaign_owner%2Chas_ti_violation%2Cmoderation_status%2Cpost_level_suspension_removal_date%2Cpls_one_liners_by_category%2Cvideo_preview%2Cview_count"
+              "&fields[post_tag]=tag_type%2Cvalue"
+              "&fields[user]=image_url%2Cfull_name%2Curl"
+              "&fields[access_rule]=access_rule_type%2Camount_cents"
+              "&fields[media]=id%2Cimage_urls%2Cdownload_url%2Cmetadata%2Cfile_name"
+              "&fields[native_video_insights]=average_view_duration%2Caverage_view_pct%2Chas_preview%2Cid%2Clast_updated_at%2Cnum_views%2Cpreview_views%2Cvideo_duration"
+              "&filter[campaign_id]={}"
+              #"&filter[campaign_id]=145535"
+              "&filter[contains_exclusive_posts]=true&filter[is_draft]=false"
+              "&sort=-published_at&json-api-version=1.0"
+              "&json-api-use-default-includes=false" )
 
 # For specific post media
 # meta
@@ -72,9 +74,10 @@ class PatreonCrawler():
 
         logger.info(f"Starting crawl of {self.campaing_url}")
         self.get_img_urls()
+
         for p in self.post_list:
             self.download_image(p)
-
+        self.cache.persist(self.post_list) 
         return
 
     def set_request_metadata(self):
@@ -175,7 +178,7 @@ class PatreonCrawler():
             r = requests.get(next_page, cookies=self.cookies, headers=self.header)
             response = r.json()
             posts = response['data']
-            n_posts = len(self.post_list)
+            n_posts = len(posts)
             logger.info(f"Got {n_posts} posts at page {page_n}")
             logger.debug(f"Crawling {next_page}")
             last_post, multi_posts = self.process_api_response(posts)
@@ -192,7 +195,7 @@ class PatreonCrawler():
 
             page_n += 1
             self.wait()
-        self.cache.persist(self.post_list) 
+
         return 
 
     def process_api_response(self, posts: dict):
@@ -201,26 +204,33 @@ class PatreonCrawler():
             attrs = post['attributes']
             self.report_post_type(attrs, post['id'])
 
-            if ( self.is_valid_post(attrs) 
-                    and not self.is_processed(post['id']) ):
-                patreon_post = self.process_post(post)
+            if  self.is_valid_post(attrs):
+                last_post = post
+                if not self.is_processed(post['id']):
+                    patreon_post = self.process_post(post)
 
-                if self.has_multiple_images(post):
-                    multi_posts.append(patreon_post)
-                
-                self.post_list.append(patreon_post)
+                    # Uncomment this if you want to detect 
+                    # attachements on post
+                    # if self.has_multiple_images(post):
+                    #    multi_posts.append(patreon_post)
+                    
+                    self.post_list.append(patreon_post)
 
         # return last post checked
-        last_post = post
         return last_post, multi_posts
 
     def has_multiple_images(self, post):
+        """ Checks if post has more than one image
+            This only check if posts shows more than on image
+            if more stuff is attached is ignored    
+        """
         attrs = post['attributes']
         try: 
             post_metadata = attrs['post_metadata']
             if not post_metadata:
                 return False
 
+            # detect multiple images on post
             img_order = post_metadata.get('image_order', None)
 
             if img_order and len(img_order) > 1: 
@@ -228,7 +238,7 @@ class PatreonCrawler():
 
             attached = post['relationships']['attachments']['data']
             if attached:
-                return True
+               return True
         except TypeError as e:
             logger.error(e)
             logger.error(f"Malformed request on {post['id']}")
@@ -280,6 +290,7 @@ class PatreonCrawler():
         if self.limit and len(self.post_list) > self.limit:
             logger.info(f"Early stop at {n_posts}")
             stop = True
+        logger.debug(f"Checking id for early stop: {post_id}")
         if self.is_processed(post_id) and not self.ignore_cache:
             logger.info(f"Early stop from cache at {n_posts}")
             stop = True
@@ -308,8 +319,8 @@ class PatreonCrawler():
                     title=attrs['title'],
                     description=attrs['content'],
                     download_url=attrs['post_file']['url'],
-                    filename=attrs['post_file']['name'],
                     post_type=attrs['post_type'],
+                    filename=attrs['post_file'].get('name',''),
                     tags=post_tags,
                     patreon_url=attrs['url'],
                     publication_date=attrs['published_at']
@@ -328,15 +339,20 @@ class PatreonCrawler():
         time.sleep(avg + jitter)
 
     def download_image(self, post):
+        logger.debug(f"Fetching {post.download_url}")
+        r = requests.get(post.download_url, cookies=self.cookies, headers=self.header)
+
+        content_disp = r.headers['content-disposition']
+        post.filename = re.findall(r'filename="(.+)";', content_disp)[0]
+    
         file_path = self.out_folder + post.filename
         if os.path.isfile(file_path):
             logger.debug(f"{file_path} exists skipping")
             return
 
-        logger.debug(f"Fetching {post.download_url}")
-        r = requests.get(post.download_url, cookies=self.cookies, headers=self.header)
         with open(self.out_folder + post.filename, mode='wb') as file:
             logger.info(f"Saving {post.filename} to {self.out_folder}")
             file.write(r.content)
         self.wait()
         return
+
