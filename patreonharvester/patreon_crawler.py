@@ -339,8 +339,9 @@ class PatreonCrawler():
         time.sleep(avg + jitter)
 
     def download_image(self, post):
-        logger.debug(f"Fetching {post.download_url}")
-        r = requests.get(post.download_url, cookies=self.cookies, headers=self.header)
+        logger.debug(f"Checking {post.download_url}")
+        
+        r = requests.head(post.download_url, cookies=self.cookies, headers=self.header)
 
         content_disp = r.headers['content-disposition']
         post.filename = re.findall(r'filename="(.+)";', content_disp)[0]
@@ -350,6 +351,8 @@ class PatreonCrawler():
             logger.debug(f"{file_path} exists skipping")
             return
 
+        logger.debug(f"Downloading {post.download_url}")
+        r = requests.get(post.download_url, cookies=self.cookies, headers=self.header)
         with open(self.out_folder + post.filename, mode='wb') as file:
             logger.info(f"Saving {post.filename} to {self.out_folder}")
             file.write(r.content)
