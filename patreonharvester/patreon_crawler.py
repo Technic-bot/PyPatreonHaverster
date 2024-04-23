@@ -181,10 +181,10 @@ class PatreonCrawler():
             n_posts = len(posts)
             logger.info(f"Got {n_posts} posts at page {page_n}")
             logger.debug(f"Crawling {next_page}")
-            last_post, multi_posts = self.process_api_response(posts)
+            latest_post, multi_posts = self.process_api_response(posts)
             self.get_media_image_urls(multi_posts)
 
-            if self.early_stop(last_post['id']):
+            if self.early_stop(latest_post['id']):
                 break
 
             links = response.get('links', None)
@@ -200,12 +200,15 @@ class PatreonCrawler():
 
     def process_api_response(self, posts: dict):
         multi_posts = []
+        latest_post = None
         for post in posts:
             attrs = post['attributes']
             self.report_post_type(attrs, post['id'])
 
             if  self.is_valid_post(attrs):
-                last_post = post
+                if not latest_post:
+                    latest_post = post
+                
                 if not self.is_processed(post['id']):
                     patreon_post = self.process_post(post)
 
@@ -217,7 +220,7 @@ class PatreonCrawler():
                     self.post_list.append(patreon_post)
 
         # return last post checked
-        return last_post, multi_posts
+        return latest_post, multi_posts
 
     def has_multiple_images(self, post):
         """ Checks if post has more than one image
