@@ -50,9 +50,9 @@ class ImageResizer(ImagePostProcessor):
                 logger.error(f'{input_path} not and image')
                 continue
             try:
+                out_path = self.out_dir + img_file
                 img = Image.open(input_path)
                 img.thumbnail([300,300])
-                out_path = self.out_dir + img_file
                 proccessed_imgs += 1
                 logger.info(f'Saving {self.out_dir + img_file}')
                 img.save(out_path)
