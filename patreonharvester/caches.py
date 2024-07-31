@@ -88,7 +88,7 @@ class SqlCache(HarvestCache):
         cursor = conn.cursor()
         sql_stmt = ("INSERT OR REPLACE INTO patreon " 
                     "(id, title, description, filename, type, "
-                    "patreon_url, date) "
+                    "src_url, date) "
                     "VALUES (?, ?, ?, ?, ?, ?, ?);")
         cursor.executemany(sql_stmt, posts)
 
