@@ -81,10 +81,6 @@ if __name__=="__main__":
             cache, args.limit,
         )
 
-    if args.login:
-        pc.login()
-        sys.exit(1)
-
     if args.gecko_path:
         pc.custom_gecko_path = args.gecko_path
     if args.browser_dir:
@@ -92,6 +88,10 @@ if __name__=="__main__":
     if args.ignore_cache:
         pc.ignore_cache = True
             
+    if args.login:
+        pc.login()
+        sys.exit(1)
+
     pc.crawl()
     pc.driver.quit()
 

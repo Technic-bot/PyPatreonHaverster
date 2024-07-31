@@ -87,19 +87,23 @@ class PatreonCrawler():
         opts.add_argument('-profile')
         logger.info(f"Reading from browser directory: {self.browser_dir}")
         opts.add_argument(self.browser_dir)
+
+        self.set_driver(opts)
+        self.driver.set_window_size(1024, 768)
+        self.cookies = self.get_browser_cookies()
+        self.header = self.get_headers()
+        self.driver.quit()
+        return
+
+    def set_driver(self, opts):
         if self.custom_gecko_path:
             service = webdriver.FirefoxService(
                         executable_path=self.custom_gecko_path
                       )
         else:
             service = webdriver.FirefoxService()
-        
         self.driver = webdriver.Firefox(service=service, options=opts)
-        self.driver.set_window_size(1024, 768)
-        self.cookies = self.get_browser_cookies()
-        self.header = self.get_headers()
-        self.driver.quit()
-        return
+
 
     def get_browser_cookies(self):
         self.driver.get('https://www.patreon.com/login')
@@ -159,8 +163,7 @@ class PatreonCrawler():
         opts = Options()
         opts.add_argument('-profile')
         opts.add_argument(self.browser_dir)
-        self.driver = webdriver.Firefox(options=opts)
-        self.driver.set_window_size(1024, 768)
+        self.set_driver(opts)
         w = WebDriverWait(self.driver, 50)
 
         print("Please login in external browser window")
