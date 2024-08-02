@@ -74,7 +74,7 @@ class SqlCache(HarvestCache):
                 'description': r['description'],
                 'filename': r['filename'],
                 'post_type': r['type'],
-                'patreon_url': r['patreon_url'],
+                'patreon_url': r['src_url'],
                 'publication_date': r['date']
                 }
             post = PatreonPost(**row_dic)
