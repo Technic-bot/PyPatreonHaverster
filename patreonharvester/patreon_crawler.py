@@ -120,6 +120,8 @@ class PatreonCrawler():
         agent = self.driver.execute_script("return navigator.userAgent")
         logger.debug(f"Using agent: {agent}")
         headers = {
+            'Host': 'www.patreon.com',
+            "User-agent": agent,
             'Accept': "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
             "Accept-Language": "en-US,en;q=0.5",
             "Cache-Control": "no-cache",
@@ -130,7 +132,7 @@ class PatreonCrawler():
             "Sec-Fetch-Mode": "navigate",
             "Sec-Fetch-Site": "none",
             "Sec-Fetch-User": "?1",
-            "User-agent": agent
+            "TE": "trailers"
         }
         return headers
 
