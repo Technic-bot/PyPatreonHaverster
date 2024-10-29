@@ -65,7 +65,7 @@ class PatreonCrawler():
 
     def crawl(self):
         self.set_request_metadata()
-        self.campaing_id = self.get_campaign_id()
+        self.get_campaign_id()
         if not self.validate_login():
             self.login()
             if not self.validate_login():
@@ -138,6 +138,8 @@ class PatreonCrawler():
         idx_stop = html.find('"', idx_str+len(eye_catcher))
         campaign_id = html[idx_str+len(eye_catcher):idx_stop]
         logger.info(f"Got campaing id: {campaign_id}")
+
+        self.campaign_id = campaign_id
         return campaign_id
 
     def validate_login(self):
@@ -177,7 +179,7 @@ class PatreonCrawler():
         return
 
     def get_img_urls(self):
-        next_page = crawl_url.format(self.campaing_id)
+        next_page = crawl_url.format(self.campaign_id)
         page_n = 1
         while next_page:
             r = requests.get(next_page, cookies=self.cookies, headers=self.header)
