@@ -118,6 +118,7 @@ class PatreonCrawler():
 
     def get_headers(self):
         agent = self.driver.execute_script("return navigator.userAgent")
+        logger.debug(f"Using agent: {agent}")
         headers = {
             'Accept': "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
             "Accept-Language": "en-US,en;q=0.5",
@@ -145,6 +146,7 @@ class PatreonCrawler():
     def validate_login(self):
         """ Check if cookies grant access to patreon """
         current_user_url = 'https://www.patreon.com/api/current_user'
+        logger.debug(f"Checking {current_user_url}")
         resp = requests.get(
                 current_user_url,
                 cookies=self.cookies,
