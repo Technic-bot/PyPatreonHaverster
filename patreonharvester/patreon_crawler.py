@@ -13,7 +13,6 @@ import random
 import json
 import os
 import re
-import cloudscraper
 
 import dataclasses
 
