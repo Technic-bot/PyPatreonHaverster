@@ -1,7 +1,10 @@
+from seleniumwire import webdriver as wiredriver
 from selenium import webdriver
 from selenium.webdriver.common.by import By
+from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.firefox.options import Options
+from selenium.webdriver.firefox.firefox_profile import FirefoxProfile
 from selenium.webdriver.support import expected_conditions as EC
 
 import requests
@@ -10,6 +13,7 @@ import random
 import json
 import os
 import re
+import cloudscraper
 
 import dataclasses
 
@@ -104,6 +108,18 @@ class PatreonCrawler():
             service = webdriver.FirefoxService()
         self.driver = webdriver.Firefox(service=service, options=opts)
 
+    def make_headless_downloader(self):
+        opts = Options()
+        opts.add_argument('--headless')
+        profile = FirefoxProfile(self.browser_dir)  
+        profile.set_preference("browser.download.folderList", 2)
+        profile.set_preference("browser.download.manager.showWhenStarting", False)
+        profile.set_preference("browser.download.dir", self.out_folder)
+        profile.set_preference("browser.helperApps.neverAsk.saveToDisk", "image/png")
+        opts.profile = profile
+        self.driver = wiredriver.Firefox(options=opts)
+        self.driver.set_page_load_timeout(5)
+        return
 
     def get_browser_cookies(self):
         self.driver.get('https://www.patreon.com/login')
@@ -155,6 +171,10 @@ class PatreonCrawler():
         """ Check if cookies grant access to patreon """
         current_user_url = 'https://www.patreon.com/api/current_user'
         logger.debug(f"Checking {current_user_url}")
+        proxies = {
+                    'http': 'http://132.145.144.3:3128',
+                  'https': 'http://132.145.144.3:3128',
+                   }
         resp = requests.get(
                 current_user_url,
                 cookies=self.cookies,
@@ -359,23 +379,22 @@ class PatreonCrawler():
         time.sleep(avg + jitter)
 
     def download_image(self, post):
+
+        self.make_headless_downloader() 
         logger.debug(f"Checking {post.download_url}")
+        try:
+            self.driver.get(post.download_url)
+        except TimeoutException as e:
+            logger.debug("Finished waiting")
+            
+
+        for req in self.driver.requests:
+            if req.response: 
+                rsp = req.response
+                if 'content-disposition' in rsp.headers:
+                    content_disp = rsp.headers['content-disposition']
+                    post.filename = re.findall(r'filename="(.+)";', content_disp)[0]
+                    break
         
-        r = requests.head(post.download_url, cookies=self.cookies, headers=self.header)
-
-        content_disp = r.headers['content-disposition']
-        post.filename = re.findall(r'filename="(.+)";', content_disp)[0]
-    
-        file_path = self.out_folder + post.filename
-        if os.path.isfile(file_path):
-            logger.debug(f"{file_path} exists skipping")
-            return
-
-        logger.debug(f"Downloading {post.download_url}")
-        r = requests.get(post.download_url, cookies=self.cookies, headers=self.header)
-        with open(self.out_folder + post.filename, mode='wb') as file:
-            logger.info(f"Saving {post.filename} to {self.out_folder}")
-            file.write(r.content)
-        self.wait()
+        self.driver.quit()
         return
-
