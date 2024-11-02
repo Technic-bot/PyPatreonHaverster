@@ -49,6 +49,7 @@ class PatreonCrawler():
             out_dir: str,
             cache: HarvestCache,
             limit: int = 0,
+            skip_download: bool = False
             ):
         self.campaing_url = url
         self.limit = limit
@@ -62,6 +63,7 @@ class PatreonCrawler():
         self.multi_image_posts = []
 
         self.ignore_cache = False
+        self.skip_download = skip_download
 
         self.cache = cache
         return
@@ -77,7 +79,8 @@ class PatreonCrawler():
 
         logger.info(f"Starting crawl of {self.campaing_url}")
         self.get_img_urls()
-
+    
+        self.make_headless_downloader()
         for p in self.post_list:
             self.download_image(p)
         self.cache.persist(self.post_list) 
@@ -117,7 +120,7 @@ class PatreonCrawler():
         profile.set_preference("browser.helperApps.neverAsk.saveToDisk", "image/png")
         opts.profile = profile
         self.driver = wiredriver.Firefox(options=opts)
-        self.driver.set_page_load_timeout(5)
+        self.driver.set_page_load_timeout(10)
         return
 
     def get_browser_cookies(self):
@@ -378,22 +381,22 @@ class PatreonCrawler():
         time.sleep(avg + jitter)
 
     def download_image(self, post):
+        if self.skip_download:
+            logger.info(f"Skipping download of files")
+            return
 
-        self.make_headless_downloader() 
+        self.wait()
         logger.debug(f"Checking {post.download_url}")
         try:
             self.driver.get(post.download_url)
         except TimeoutException as e:
             logger.debug("Finished waiting")
             
-
-        for req in self.driver.requests:
-            if req.response: 
-                rsp = req.response
-                if 'content-disposition' in rsp.headers:
-                    content_disp = rsp.headers['content-disposition']
-                    post.filename = re.findall(r'filename="(.+)";', content_disp)[0]
-                    break
+        if self.driver.last_request.response: 
+            rsp = self.driver.last_request.response
+            if 'content-disposition' in rsp.headers:
+                content_disp = rsp.headers['content-disposition']
+                post.filename = re.findall(r'filename="(.+)";', content_disp)[0]
+                logger.info(f"Saved {post.filename}")
         
-        self.driver.quit()
         return

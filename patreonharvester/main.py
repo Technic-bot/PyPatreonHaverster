@@ -26,6 +26,7 @@ if __name__=="__main__":
     pc = PatreonCrawler(
             args.url, args.outdir,
             cache, args.limit,
+            args.skip_download
         )
 
     if args.gecko_path:

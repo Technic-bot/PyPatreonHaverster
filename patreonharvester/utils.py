@@ -16,6 +16,7 @@ def proc_opts():
     parser.add_argument('--post-process', default='', help='Post processor')
     parser.add_argument('--post-process-dir', default='', help='Post Proces output directory')
     parser.add_argument('--ignore-cache', action='store_true', help='Keep scraping regardless of hitting cache')
+    parser.add_argument('--skip-download', action='store_true', help='Do not donwnload the image only update cache')
     return parser.parse_args()
 
 
@@ -42,8 +43,8 @@ def setup_processor_logging(logger, log_file='patreon_harvester.log'):
 
 def cache_factory(filename):
     cache = None
-    if not os.path.isfile(filename):
-        print("No file found starting with empty json cache")
+    if filename == "empty": 
+        print("Starting with empty json cache")
         cache = caches.EmptyJsonCache(filename)
         return cache
 
@@ -51,6 +52,8 @@ def cache_factory(filename):
         cache = caches.JsonCache(filename)
     elif filename.endswith('.db'):
         cache = caches.SqlCache(filename)
+    elif filename.endswith('.csv'):
+        cache = caches.CsvCache(filename)
         
     n_cache = len(cache.patreon_data)
     print(f"Read {n_cache} post from {filename}")
